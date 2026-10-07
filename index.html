@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대한민국 산불 이력 탐색 & dNBR 피해 비교 분석 시스템</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="map-pin"></i>
+        </div>
+        <div>
+          <h1>Korea GeoFire Explorer</h1>
+          <p class="subtitle">지역 선택 ➔ 해당 지역 실재 산불 발생 날짜 선택 ➔ dNBR 위험도 시각화</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="view-mode-toggle">
+          <button id="btnSingleView" class="mode-btn active"><i data-lucide="map"></i> 단일 지도</button>
+          <button id="btnCompareView" class="mode-btn"><i data-lucide="columns"></i> 정상일 vs 비교일 분할 비교</button>
+        </div>
+        <button id="btnExportCSV" class="btn btn-secondary" disabled>
+          <i data-lucide="download"></i> CSV 내보내기
+        </button>
+        <button id="btnPrintReport" class="btn btn-primary" disabled>
+          <i data-lucide="file-text"></i> 리포트 인쇄
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="main-layout">
+      <!-- Left Sidebar Controls -->
+      <aside class="sidebar">
+        <!-- Section 1: Region Selection (Initial Blank) -->
+        <section class="card">
+          <div class="card-header">
+            <i data-lucide="mouse-pointer"></i>
+            <h2>1. 분석 지역 선택</h2>
+          </div>
+          <div class="card-body">
+            <p class="help-text-primary"><i data-lucide="info"></i> 오른쪽 <strong>지도 중 분석하고 싶은 지역을 클릭</strong>하거나 지명을 검색하세요.</p>
+
+            <div class="form-group">
+              <label for="regionSearch">전국 지명 / 행정구역 검색:</label>
+              <div class="input-with-btn">
+                <input type="text" id="regionSearch" placeholder="예: 강릉 옥계, 울진 북면, 안동 풍천, 서울 인왕산...">
+                <button id="btnSearchRegion" class="btn-icon"><i data-lucide="search"></i></button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="koreaProvinceSelect">주요 산불 발생 지자체 선택:</label>
+              <select id="koreaProvinceSelect">
+                <option value="" selected>-- 지자체를 선택하세요 --</option>
+                <option value="okgye">강원특별자치도 강릉시 옥계면 (옥계 산불)</option>
+                <option value="uljin">경상북도 울진군 북면 (울진·삼척 산불)</option>
+                <option value="goseong">강원특별자치도 고성군 토성면 (고성 산불)</option>
+                <option value="andong">경상북도 안동시 풍천면 (안동 산불)</option>
+                <option value="miryang">경상남도 밀양시 부북면 (밀양 산불)</option>
+                <option value="hapcheon">경상남도 합천군 룡주면 (합천 산불)</option>
+                <option value="inwang">서울특별시 종로구 (인왕산 산불)</option>
+              </select>
+            </div>
+
+            <div class="selected-location-box" id="selectedLocationBox">
+              <div class="loc-name" id="selectedRegionTitle">선택된 지역이 없습니다.</div>
+              <div class="loc-coords" id="selectedRegionCoords">지도를 클릭하여 지역을 선택해주세요.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 2: Historical Fire Dates Selection (Enabled after Region Select) -->
+        <section class="card">
+          <div class="card-header">
+            <i data-lucide="calendar"></i>
+            <h2>2. 해당 지역 산불 발생 날짜 선택</h2>
+          </div>
+          <div class="card-body">
+            <div id="fireDatesContainer" class="fire-dates-box">
+              <p class="placeholder-text" id="fireDatesPlaceholder">
+                <i data-lucide="info"></i> 먼저 지도에서 분석할 지역을 선택하면, 해당 지역에서 실제로 발생했던 산불 날짜 목록이 여기에 표시됩니다.
+              </p>
+              <div class="fire-history-list" id="fireHistoryList" style="display: none;"></div>
+            </div>
+
+            <div class="custom-date-box" id="customDateBox" style="display: none;">
+              <label for="targetDate">기타 날짜 직접 지정:</label>
+              <input type="date" id="targetDate">
+            </div>
+
+            <div class="form-group" style="margin-top: 0.5rem;">
+              <label for="satelliteSensor">위성 센서 선택:</label>
+              <select id="satelliteSensor">
+                <option value="auto" selected>자동 최적 센서 (추천 - Sentinel-2 / Landsat)</option>
+                <option value="S2">Sentinel-2 (ESA) - 10m/20m 해상도</option>
+                <option value="L8">Landsat 8/9 (USGS/NASA) - 30m 해상도</option>
+              </select>
+            </div>
+
+            <button id="btnCalculate" class="btn btn-accent btn-full" disabled>
+              <i data-lucide="cpu"></i> dNBR 위험도 시각화 산출 실행
+            </button>
+          </div>
+        </section>
+
+        <!-- Section 3: Legend -->
+        <section class="card">
+          <div class="card-header">
+            <i data-lucide="shield-alert"></i>
+            <h2>USGS dNBR 위험도 범주</h2>
+          </div>
+          <div class="card-body">
+            <div class="legend-vertical">
+              <div class="legend-item"><span class="badge" style="background:#7a0099;"></span><strong>중증 피해 (High Severity)</strong> &gt; +650</div>
+              <div class="legend-item"><span class="badge" style="background:#ff3300;"></span><strong>중중도 피해 (Mod-High)</strong> +440 ~ +650</div>
+              <div class="legend-item"><span class="badge" style="background:#ff9900;"></span><strong>중경도 피해 (Mod-Low)</strong> +270 ~ +439</div>
+              <div class="legend-item"><span class="badge" style="background:#ffff00;"></span><strong>경도 피해 (Low Severity)</strong> +100 ~ +269</div>
+              <div class="legend-item"><span class="badge" style="background:#33cc33;"></span><strong>정상 / 미피해 (Unburned)</strong> -500 ~ +99</div>
+              <div class="legend-item"><span class="badge" style="background:#006600;"></span><strong>고식생 회복 (Regrowth)</strong> &lt; -500</div>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Center & Right Maps Area -->
+      <section class="content-area">
+        <!-- Single Map Container -->
+        <div class="map-card" id="singleMapContainer">
+          <div class="map-toolbar">
+            <div class="view-switch">
+              <button class="tab-btn active" data-layer="dnbr"><i data-lucide="flame"></i> dNBR 위험도 Map</button>
+              <button class="tab-btn" data-layer="prefire"><i data-lucide="tree-pine"></i> 정상일 식생(Pre-fire NBR)</button>
+              <button class="tab-btn" data-layer="postfire"><i data-lucide="fire"></i> 산불후 식생(Post-fire NBR)</button>
+            </div>
+            <div class="opacity-control">
+              <label for="mapOpacity">투명도:</label>
+              <input type="range" id="mapOpacity" min="0" max="1" step="0.1" value="0.85">
+            </div>
+          </div>
+          <div id="map" class="map-view"></div>
+          <div class="map-overlay-info" id="mapHoverInfo">
+            <span><i data-lucide="mouse-pointer"></i> 지도를 클릭하여 지역을 선택하고, 표시되는 산불 발생 날짜를 클릭하세요.</span>
+          </div>
+        </div>
+
+        <!-- Split Screen Comparison Map Container -->
+        <div class="map-card compare-container" id="compareMapContainer" style="display: none;">
+          <div class="compare-header">
+            <div class="compare-title left-title">
+              <i data-lucide="tree-pine"></i> <span>정상일 식생 상태 (Normal Pre-Fire)</span>
+              <strong id="lblPreFireDate">정상일</strong>
+            </div>
+            <div class="compare-title right-title">
+              <i data-lucide="flame"></i> <span>산불 피해 위험도 (Post-Fire dNBR)</span>
+              <strong id="lblPostFireDate">산불일</strong>
+            </div>
+          </div>
+          <div class="dual-map-wrapper">
+            <div id="mapLeft" class="map-view split-map"></div>
+            <div id="mapRight" class="map-view split-map"></div>
+          </div>
+        </div>
+
+        <!-- Dashboard Results Section -->
+        <div class="results-grid" id="resultsSection" style="display: none;">
+          <!-- Severity Table Card -->
+          <div class="card result-card">
+            <div class="card-header">
+              <i data-lucide="table"></i>
+              <h2>선택 지역 산불 피해 심각도 집계표</h2>
+            </div>
+            <div class="card-body">
+              <table class="table" id="severityTable">
+                <thead>
+                  <tr>
+                    <th>심각도 등급 (USGS Class)</th>
+                    <th>dNBR 범주</th>
+                    <th>면적 (ha)</th>
+                    <th>면적 ($\text{km}^2$)</th>
+                    <th>비율 (%)</th>
+                  </tr>
+                </thead>
+                <tbody id="severityTableBody"></tbody>
+                <tfoot id="severityTableFoot"></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- Chart Card -->
+          <div class="card result-card">
+            <div class="card-header">
+              <i data-lucide="pie-chart"></i>
+              <h2>정상일 vs 산불일 식생 분포</h2>
+            </div>
+            <div class="card-body chart-container">
+              <canvas id="severityChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Executive Summary -->
+          <div class="card result-card full-width">
+            <div class="card-header">
+              <i data-lucide="file-check-2"></i>
+              <h2>산불 피해 정밀 진단 요약</h2>
+            </div>
+            <div class="card-body summary-body">
+              <div class="insights-box" id="executiveSummaryText">
+                <h4><i data-lucide="activity"></i> 위성 분석 진단 결과</h4>
+                <p id="summaryParagraph">지역 및 날짜를 선택하면 진단 결과가 표출됩니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loader -->
+        <div id="loader" class="loader-overlay" style="display: none;">
+          <div class="spinner"></div>
+          <p id="loaderStatusText">위성 데이터 수집 중...</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
