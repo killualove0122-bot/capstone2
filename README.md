@@ -27,7 +27,7 @@
 
 ---
 
-### 2. 로컬에서 실행하기 (Local Server - http://localhost:8080)
+### 2. 로컬에서 실행하기 (Local Server - http://localhost:8085)
 
 1. 저장소 클론 (Repository Clone):
 ```bash
@@ -41,7 +41,7 @@ python -m http.server 8080
 ```
 
 3. 웹 브라우저 접속:
-`http://localhost:8080/`
+`http://localhost:8085/`
 
 ---
 
