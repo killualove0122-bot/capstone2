@@ -27,7 +27,7 @@
 
 ---
 
-### 2. 로컬에서 실행하기 (Local Server - http://localhost:8085)
+### 2. 로컬에서 실행하기 (Local Server - (https://capstone23-azure.vercel.app/)
 
 1. 저장소 클론 (Repository Clone):
 ```bash
