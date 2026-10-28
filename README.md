@@ -41,7 +41,7 @@ python -m http.server 8080
 ```
 
 3. 웹 브라우저 접속:
-`http://localhost:8085/`
+`https://capstone23-azure.vercel.app/`
 
 ---
 
